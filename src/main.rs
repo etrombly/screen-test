@@ -37,8 +37,15 @@ use stm32f1xx_hal::{
     prelude::*,
     serial::{Rx, Serial, Tx},
     spi::Spi,
+    i2c::{I2c, Mode, blocking_i2c},
     timer::{Event, Timer},
 };
+use htu21d::Htu21df;
+use bmpx85::Bmpx85;
+
+// Debug
+use cortex_m_semihosting::hio;
+use core::fmt::Write;
 
 const LUT: [u8; 70] = [
     0x80, 0x60, 0x40, 0x00, 0x00, 0x00, 0x00, //LUT0: BB:     VS 0 ~7
@@ -176,13 +183,39 @@ const APP: () = {
         let mut delay = Delay::new(core.SYST, clocks);
 
         let mut gpioa = device.GPIOA.split(&mut rcc.apb2);
+        let mut gpiob = device.GPIOB.split(&mut rcc.apb2);
 
         let reset = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
         let dc = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
         let cs = gpioa.pa3.into_push_pull_output(&mut gpioa.crl);
         let busy = gpioa.pa4;
 
-        // SPI1
+        // I2C1 for htu21d
+        let scl1 = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
+        let sda1 = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
+
+        let i2c_hum = I2c::i2c1(device.I2C1, (scl1, sda1), &mut afio.mapr, Mode::Standard{frequency: 100_000}, clocks, &mut rcc.apb1);
+        let i2c_hum = blocking_i2c(i2c_hum, clocks, 1000,10,1000,1000);
+
+        //let mut htu21df = Htu21df::new(i2c_hum).unwrap();
+        //let hum = htu21df.get_humidity();
+
+        let mut stdout = hio::hstdout().unwrap();
+        //write!(stdout, "{:?}", hum).unwrap();
+
+        // I2C2 for bmp180
+        let scl2 = gpiob.pb10.into_alternate_open_drain(&mut gpiob.crh);
+        let sda2 = gpiob.pb11.into_alternate_open_drain(&mut gpiob.crh);
+
+        let i2c_press = I2c::i2c2(device.I2C2, (scl2, sda2), Mode::Standard{frequency: 100_000}, clocks, &mut rcc.apb1);
+        let i2c_press = blocking_i2c(i2c_press, clocks, 1000,10,1000,1000);
+
+        let mut bmpx85 = Bmpx85::new(i2c_press);
+        let chip = bmpx85.get_chip_id();
+
+        write!(stdout, "{:?}", chip).unwrap();
+
+        // SPI1 display
         let sck = gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl);
         let miso = gpioa.pa6;
         let mosi = gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl);

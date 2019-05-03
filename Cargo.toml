@@ -27,6 +27,12 @@ features = ["stm32f103", "rt"]
 [dependencies.cortex-m-rtfm]
 version = "0.4.2"
 
+[dependencies.htu21d]
+path = "../htu21d"
+
+[dependencies.bmpx85]
+path = "../bmpx85"
+
 # this lets you use `cargo fix`!
 [[bin]]
 name = "screen-test"
